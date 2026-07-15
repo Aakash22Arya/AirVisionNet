@@ -1,0 +1,3780 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AirVisionNet – Air Quality Estimator</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%235eead4'/%3E%3Cstop offset='100%25' stop-color='%230ea5e9'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='%23050810'/%3E%3Ccircle cx='20' cy='22' r='4' fill='url(%23g)'/%3E%3Ccircle cx='32' cy='16' r='3' fill='url(%23g)'/%3E%3Ccircle cx='46' cy='24' r='4' fill='url(%23g)'/%3E%3Cpath d='M12 36c6-6 12-6 18 0s12 6 18 0 10-6 10-6' stroke='%235eead4' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3Cpath d='M16 48c5-4 10-4 15 0s10 4 15 0' stroke='%2338bdf8' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&family=Sora:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.min.js"></script>
+    <style>
+      :root {
+        --bg-deep: #050810;
+        --bg: #0a0f1c;
+        --surface: rgba(14, 20, 36, 0.65);
+        --surface-solid: #121a2e;
+        --surface2: rgba(22, 32, 56, 0.85);
+        --elevated: rgba(28, 40, 68, 0.9);
+        --border: rgba(148, 163, 184, 0.1);
+        --border-glow: rgba(94, 234, 212, 0.22);
+        --text: #f1f5f9;
+        --text2: #94a3b8;
+        --text3: #64748b;
+        --accent: #5eead4;
+        --accent-dim: rgba(94, 234, 212, 0.12);
+        --accent2: #38bdf8;
+        --warm: #fbbf24;
+        --danger: #f87171;
+        --radius: 16px;
+        --radius-sm: 10px;
+        --shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.55);
+        --font: "Outfit", system-ui, sans-serif;
+        --display: "Sora", system-ui, sans-serif;
+        --mono: "JetBrains Mono", monospace;
+      }
+
+      body.light-theme {
+        --bg-deep: #eef2f7;
+        --bg: #f8fafc;
+
+        --surface: rgba(255, 255, 255, 0.82);
+        --surface-solid: #ffffff;
+        --surface2: rgba(248, 250, 252, 0.95);
+        --elevated: rgba(255, 255, 255, 0.98);
+
+        --border: rgba(15, 23, 42, 0.08);
+        --border-glow: rgba(14, 165, 233, 0.2);
+
+        --text: #0f172a;
+        --text2: #334155;
+        --text3: #64748b;
+
+        --accent: #0ea5e9;
+        --accent-dim: rgba(14, 165, 233, 0.1);
+        --accent2: #2563eb;
+
+        --warm: #d97706;
+        --danger: #dc2626;
+
+        --shadow: 0 10px 35px rgba(15, 23, 42, 0.08);
+      }
+
+      body,
+      .card,
+      .stat-box,
+      .metric-card,
+      .sidebar,
+      .header,
+      .btn,
+      .nav-item,
+      .upload-zone,
+      .status-chip {
+        transition:
+          background 0.25s ease,
+          color 0.25s ease,
+          border-color 0.25s ease,
+          box-shadow 0.25s ease;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        font-family: var(--font);
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--text);
+        background: var(--bg-deep);
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+
+      /* Ambient background */
+      .ambient {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+      .ambient::before {
+        content: "";
+        position: absolute;
+        width: 900px;
+        height: 900px;
+        top: -320px;
+        right: -200px;
+        background: radial-gradient(
+          circle,
+          rgba(56, 189, 248, 0.14) 0%,
+          transparent 65%
+        );
+        filter: blur(2px);
+      }
+      .ambient::after {
+        content: "";
+        position: absolute;
+        width: 700px;
+        height: 700px;
+        bottom: -200px;
+        left: -120px;
+        background: radial-gradient(
+          circle,
+          rgba(94, 234, 212, 0.1) 0%,
+          transparent 60%
+        );
+      }
+      .ambient-grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(148, 163, 184, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(148, 163, 184, 0.03) 1px, transparent 1px);
+        background-size: 48px 48px;
+        mask-image: radial-gradient(
+          ellipse 80% 70% at 50% 30%,
+          black 20%,
+          transparent 75%
+        );
+      }
+
+      /* Layout */
+      .app {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 268px 1fr;
+        grid-template-rows: auto 1fr;
+        min-height: 100vh;
+      }
+
+      /* Header */
+      .header {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 0 28px;
+        height: 68px;
+        background: rgba(10, 15, 28, 0.75);
+        backdrop-filter: blur(20px);
+        border-bottom: 1px solid var(--border);
+        position: sticky;
+        top: 0;
+        z-index: 20;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .brand-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 11px;
+        background: linear-gradient(
+          135deg,
+          var(--accent) 0%,
+          var(--accent2) 100%
+        );
+        display: grid;
+        place-items: center;
+        box-shadow: 0 0 24px rgba(94, 234, 212, 0.35);
+      }
+      .brand-icon svg {
+        width: 20px;
+        height: 20px;
+        color: #042f2e;
+      }
+      .header-logo {
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 1.25rem;
+        letter-spacing: -0.03em;
+        line-height: 1.1;
+      }
+      .header-logo span {
+        color: var(--text2);
+        font-weight: 600;
+      }
+      .header-tagline {
+        font-size: 11px;
+        color: var(--text3);
+        margin-top: 1px;
+      }
+      .header-badge {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: var(--accent-dim);
+        color: var(--accent);
+        border: 1px solid var(--border-glow);
+      }
+      .header-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .status-chip {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        font-size: 12px;
+        color: var(--text2);
+      }
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 12px var(--accent);
+        animation: pulse 2.2s ease-in-out infinite;
+      }
+      .status-dot.offline {
+        background: var(--danger);
+        box-shadow: 0 0 12px var(--danger);
+        animation: none;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.5;
+          transform: scale(0.85);
+        }
+      }
+
+      /* Sidebar */
+      .sidebar {
+        padding: 24px 16px;
+        border-right: 1px solid var(--border);
+        background: rgba(8, 12, 22, 0.5);
+        backdrop-filter: blur(12px);
+        overflow-y: auto;
+      }
+      .nav-section {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text3);
+        padding: 8px 12px 10px;
+        margin-top: 8px;
+      }
+      .nav-section:first-child {
+        margin-top: 0;
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 11px 14px;
+        margin-bottom: 4px;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        color: var(--text2);
+        font-size: 14px;
+        font-weight: 500;
+        border: 1px solid transparent;
+        transition:
+          color 0.2s,
+          background 0.2s,
+          border-color 0.2s,
+          transform 0.15s;
+      }
+      .nav-item:hover {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .nav-item.active {
+        color: var(--accent);
+        background: var(--accent-dim);
+        border-color: var(--border-glow);
+      }
+      .nav-item svg {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+        opacity: 0.85;
+      }
+      .nav-item.active svg {
+        opacity: 1;
+      }
+
+      .sidebar-footer {
+        margin-top: 32px;
+        padding: 16px 14px;
+        border-radius: var(--radius-sm);
+        background: linear-gradient(
+          145deg,
+          rgba(94, 234, 212, 0.08),
+          rgba(56, 189, 248, 0.05)
+        );
+        border: 1px solid var(--border);
+      }
+      .sidebar-footer p {
+        font-size: 12px;
+        color: var(--text3);
+        line-height: 1.5;
+      }
+      .sidebar-footer strong {
+        color: var(--text2);
+        font-weight: 500;
+      }
+
+      /* Main */
+      .main {
+        padding: 32px 36px 48px;
+        overflow-y: auto;
+        width: 100%;
+      }
+      .main {
+        margin: 0 auto;
+      }
+      .page {
+        display: none;
+        animation: fadeIn 0.35s ease;
+      }
+      .upload-zone:hover {
+        transform: translateY(-2px) scale(1.01);
+      }
+      .aqi-ring {
+        box-shadow:
+          0 0 30px rgba(0, 0, 0, 0.06),
+          0 0 24px var(--ring-color, #22c55e44);
+      }
+      .page.active {
+        display: block;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      .page-header {
+        margin-bottom: 28px;
+      }
+      .page-header h1 {
+        font-family: var(--display);
+        font-size: 1.75rem;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        background: linear-gradient(135deg, var(--text) 0%, var(--text2) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .page-header p {
+        color: var(--text2);
+        font-size: 14px;
+        margin-top: 6px;
+        max-width: 520px;
+      }
+
+      /* Cards */
+      .card {
+        background: var(--surface);
+        backdrop-filter: blur(16px);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 24px;
+        box-shadow: var(--shadow);
+        position: relative;
+        overflow: hidden;
+      }
+      .card {
+        transition:
+          transform 0.2s ease,
+          border-color 0.2s ease,
+          background 0.25s ease;
+      }
+      .card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(94, 234, 212, 0.25),
+          transparent
+        );
+      }
+      .card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(14, 165, 233, 0.18);
+      }
+      .card-title {
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--text3);
+        margin-bottom: 18px;
+      }
+      .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 18px;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .card-head .card-title {
+        margin-bottom: 0;
+      }
+
+      /* Upload */
+      .upload-zone {
+        border: 2px dashed rgba(148, 163, 184, 0.2);
+        border-radius: var(--radius);
+        padding: 48px 24px;
+        text-align: center;
+        cursor: pointer;
+        transition:
+          border-color 0.25s,
+          background 0.25s,
+          transform 0.2s;
+        position: relative;
+        background: rgba(0, 0, 0, 0.2);
+      }
+      .upload-zone:hover,
+      .upload-zone.drag {
+        border-color: var(--accent);
+        background: var(--accent-dim);
+        transform: translateY(-1px);
+      }
+      .upload-zone input[type="file"] {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+        width: 100%;
+        height: 100%;
+      }
+      .upload-icon-wrap {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 16px;
+        border-radius: 50%;
+        background: var(--accent-dim);
+        border: 1px solid var(--border-glow);
+        display: grid;
+        place-items: center;
+      }
+      .upload-icon {
+        width: 28px;
+        height: 28px;
+        color: var(--accent);
+      }
+      .upload-title {
+        font-weight: 600;
+        font-size: 16px;
+        margin-bottom: 6px;
+      }
+      .upload-sub {
+        color: var(--text2);
+        font-size: 13px;
+      }
+      .upload-hint {
+        margin-top: 14px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text3);
+      }
+
+      /* Preview */
+      .preview-wrap {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 4/3;
+        background: #000;
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+        margin-bottom: 16px;
+        border: 1px solid var(--border);
+        box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.5);
+      }
+      .preview-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .preview-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        background: rgba(5, 8, 16, 0.75);
+        backdrop-filter: blur(4px);
+      }
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(94, 234, 212, 0.15);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.75s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .loading-label {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--accent);
+        letter-spacing: 0.08em;
+      }
+
+      /* Results */
+      .predict-layout {
+        display: grid;
+        grid-template-columns: 1fr 1.05fr;
+        gap: 24px;
+        align-items: start;
+      }
+      .result-panel {
+        min-height: 420px;
+      }
+      .result-empty {
+        text-align: center;
+        padding: 72px 24px;
+        color: var(--text3);
+      }
+      .result-empty-icon {
+        width: 72px;
+        height: 72px;
+        margin: 0 auto 20px;
+        border-radius: 50%;
+        background: var(--surface2);
+        border: 1px dashed var(--border);
+        display: grid;
+        place-items: center;
+      }
+      .result-empty-icon svg {
+        width: 32px;
+        height: 32px;
+        opacity: 0.35;
+      }
+      .result-empty div {
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      .aqi-hero {
+        display: flex;
+        align-items: center;
+        gap: 28px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+      }
+      .aqi-ring-wrap {
+        position: relative;
+        width: 140px;
+        height: 140px;
+        flex-shrink: 0;
+      }
+      .aqi-ring {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background: conic-gradient(
+          var(--ring-color, var(--accent)) calc(var(--aqi-pct, 0) * 1%),
+          rgba(148, 163, 184, 0.12) 0
+        );
+        display: grid;
+        place-items: center;
+        transition: background 0.8s cubic-bezier(0.34, 1.2, 0.64, 1);
+      }
+      .aqi-ring::before {
+        content: "";
+        position: absolute;
+        inset: 10px;
+        border-radius: 50%;
+        background: var(--surface-solid);
+        border: 1px solid var(--border);
+      }
+      .aqi-ring-inner {
+        position: relative;
+        z-index: 1;
+        text-align: center;
+      }
+      .aqi-ring-label {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text3);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .aqi-num {
+        font-family: var(--display);
+        font-size: 2.5rem;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.04em;
+      }
+      .aqi-hero-text {
+        flex: 1;
+        min-width: 180px;
+      }
+      .aqi-category {
+        font-family: var(--display);
+        font-size: 1.35rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .health-msg {
+        font-size: 13px;
+        color: var(--text2);
+        margin-top: 8px;
+        line-height: 1.55;
+        max-width: 320px;
+      }
+
+      .result-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .metric-card {
+        padding: 18px;
+        border-radius: var(--radius-sm);
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        transition: border-color 0.2s;
+      }
+      .metric-card:hover {
+        border-color: var(--border-glow);
+      }
+      .metric-label {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text3);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+      }
+      .metric-value {
+        font-family: var(--display);
+        font-size: 1.85rem;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 1;
+      }
+      .metric-unit {
+        font-family: var(--font);
+        font-size: 13px;
+        font-weight: 400;
+        color: var(--text2);
+        margin-left: 4px;
+      }
+
+      .gauge-section {
+        margin-top: 22px;
+      }
+      .gauge-label {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text3);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+      }
+      .gauge-track {
+        height: 12px;
+        border-radius: 999px;
+        background: linear-gradient(
+          to right,
+          #22c55e 0%,
+          #84cc16 16%,
+          #eab308 33%,
+          #f97316 50%,
+          #a855f7 66%,
+          #dc2626 100%
+        );
+        position: relative;
+        box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.35);
+      }
+      .gauge-needle {
+        position: absolute;
+        top: 50%;
+        width: 14px;
+        height: 14px;
+        margin-top: -7px;
+        margin-left: -7px;
+        background: white;
+        border-radius: 50%;
+        border: 2px solid var(--bg-deep);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+        transition: left 0.7s cubic-bezier(0.34, 1.4, 0.64, 1);
+      }
+      .gauge-labels {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 8px;
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--text3);
+      }
+      .res-meta {
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text3);
+      }
+
+      /* Buttons */
+      .btn-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        border-radius: var(--radius-sm);
+        font-family: var(--font);
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        transition: all 0.2s;
+      }
+      .btn:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(148, 163, 184, 0.25);
+      }
+      .btn-accent {
+        background: linear-gradient(135deg, var(--accent) 0%, #2dd4bf 100%);
+        color: #042f2e;
+        border: none;
+        box-shadow: 0 4px 20px rgba(94, 234, 212, 0.3);
+      }
+      .btn-accent:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 28px rgba(94, 234, 212, 0.4);
+      }
+      .btn-danger {
+        color: var(--danger);
+        border-color: rgba(248, 113, 113, 0.3);
+      }
+      .btn-danger:hover {
+        background: rgba(248, 113, 113, 0.08);
+      }
+      .btn-sm {
+        padding: 7px 14px;
+        font-size: 12px;
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        transform: none !important;
+      }
+
+      /* Tables */
+      .table-wrap {
+        overflow-x: auto;
+        border-radius: var(--radius-sm);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th {
+        text-align: left;
+        padding: 12px 14px;
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 500;
+        color: var(--text3);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        background: rgba(0, 0, 0, 0.25);
+        border-bottom: 1px solid var(--border);
+      }
+      td {
+        padding: 14px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+      }
+      tbody tr {
+        transition: background 0.15s;
+      }
+      tbody tr:hover td {
+        background: rgba(94, 234, 212, 0.04);
+      }
+      .pill {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .std-table th {
+        background: var(--surface2);
+      }
+      .std-table td {
+        padding: 12px 14px;
+      }
+
+      /* Stats */
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      .stat-box {
+        padding: 20px;
+        border-radius: var(--radius);
+        background: var(--surface);
+        backdrop-filter: blur(12px);
+        border: 1px solid var(--border);
+        position: relative;
+        overflow: hidden;
+      }
+      .stat-box::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 80px;
+        height: 80px;
+        background: radial-gradient(circle, var(--accent-dim), transparent 70%);
+        pointer-events: none;
+      }
+      .stat-num {
+        font-family: var(--display);
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--accent);
+        letter-spacing: -0.03em;
+      }
+      .stat-lbl {
+        font-size: 12px;
+        color: var(--text2);
+        margin-top: 4px;
+      }
+
+      .chart-wrap {
+        position: relative;
+        height: 280px;
+      }
+      .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      .full-col {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      /* About */
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        margin-top: 18px;
+      }
+      .feature-card {
+        padding: 18px;
+        border-radius: var(--radius-sm);
+        background: var(--surface2);
+        border: 1px solid var(--border);
+      }
+      .feature-card .label {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        margin-bottom: 8px;
+      }
+      .feature-card p {
+        font-size: 13px;
+        color: var(--text2);
+        line-height: 1.55;
+      }
+      .code-block {
+        margin-top: 16px;
+        padding: 18px 20px;
+        border-radius: var(--radius-sm);
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid var(--border);
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text2);
+        line-height: 2;
+      }
+      .code-block .cmt {
+        color: var(--text3);
+      }
+      .inline-code {
+        background: var(--surface2);
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-family: var(--mono);
+        font-size: 12px;
+        border: 1px solid var(--border);
+      }
+
+      .color-ref-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 12px;
+        margin-top: 8px;
+      }
+
+      .model-chip {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.03em;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: rgba(56, 189, 248, 0.1);
+        color: var(--accent2);
+        border: 1px solid rgba(56, 189, 248, 0.22);
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .step-strip {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+      }
+      .step-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text3);
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        transition: all 0.25s ease;
+      }
+      .step-pill.active {
+        color: var(--accent);
+        background: var(--accent-dim);
+        border-color: var(--border-glow);
+      }
+      .step-pill.done {
+        color: var(--accent2);
+        border-color: rgba(56, 189, 248, 0.25);
+      }
+      .step-num {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 600;
+        background: rgba(148, 163, 184, 0.12);
+      }
+      .step-pill.active .step-num,
+      .step-pill.done .step-num {
+        background: rgba(94, 234, 212, 0.2);
+        color: var(--accent);
+      }
+
+      .metric-sub {
+        margin-top: 8px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text3);
+      }
+      .metric-sub strong {
+        color: var(--text2);
+        font-weight: 600;
+      }
+
+      .result-banner {
+        margin-bottom: 18px;
+        padding: 14px 16px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: linear-gradient(
+          135deg,
+          rgba(94, 234, 212, 0.06),
+          rgba(56, 189, 248, 0.04)
+        );
+        font-size: 13px;
+        color: var(--text2);
+        line-height: 1.55;
+      }
+      .result-banner strong {
+        color: var(--text);
+      }
+
+      .tips-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 4px;
+      }
+      .tip-item {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        font-size: 13px;
+        color: var(--text2);
+        line-height: 1.5;
+      }
+      .tip-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+        margin-top: 7px;
+        flex-shrink: 0;
+        box-shadow: 0 0 10px var(--accent);
+      }
+
+      body.light-theme .model-chip {
+        background: rgba(14, 165, 233, 0.08);
+        color: #0284c7;
+        border-color: rgba(14, 165, 233, 0.18);
+      }
+
+      body.light-theme .result-banner {
+        background: rgba(14, 165, 233, 0.05);
+      }
+
+      .geo-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 12px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--accent2);
+        background: rgba(56, 189, 248, 0.1);
+        border: 1px solid rgba(56, 189, 248, 0.22);
+      }
+      .geo-badge.missing {
+        color: var(--text3);
+        background: var(--surface2);
+        border-color: var(--border);
+      }
+      .geo-badge.hotspot-ready {
+        color: #f97316;
+        background: rgba(249, 115, 22, 0.12);
+        border-color: rgba(249, 115, 22, 0.3);
+      }
+
+      .hotspot-alert {
+        margin-bottom: 18px;
+        padding: 16px 18px;
+        border-radius: var(--radius-sm);
+        border: 1px solid rgba(249, 115, 22, 0.35);
+        background: linear-gradient(
+          135deg,
+          rgba(249, 115, 22, 0.14),
+          rgba(220, 38, 38, 0.08)
+        );
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .hotspot-alert-text {
+        font-size: 13px;
+        color: var(--text2);
+        line-height: 1.55;
+      }
+      .hotspot-alert-text strong {
+        color: #f97316;
+      }
+
+      .hotspot-layout {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 20px;
+        align-items: start;
+      }
+      .map-card {
+        padding: 0;
+        overflow: hidden;
+      }
+      .map-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+      }
+      .map-toolbar-title {
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text3);
+      }
+      .map-filters {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .filter-chip {
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        border: 1px solid var(--border);
+        background: var(--surface2);
+        color: var(--text2);
+        transition: all 0.2s ease;
+      }
+      .filter-chip.active {
+        color: var(--accent);
+        background: var(--accent-dim);
+        border-color: var(--border-glow);
+      }
+      .filter-chip.hotspot-filter.active {
+        color: #f97316;
+        background: rgba(249, 115, 22, 0.12);
+        border-color: rgba(249, 115, 22, 0.35);
+      }
+      #hotspotMap {
+        width: 100%;
+        height: 520px;
+        background: var(--surface2);
+      }
+      .map-setup {
+        padding: 48px 24px;
+        text-align: center;
+        color: var(--text2);
+      }
+      .map-setup h3 {
+        font-family: var(--display);
+        color: var(--text);
+        margin-bottom: 8px;
+      }
+      .map-setup p {
+        font-size: 13px;
+        line-height: 1.6;
+        max-width: 420px;
+        margin: 0 auto 16px;
+      }
+      .map-key-row {
+        display: flex;
+        gap: 8px;
+        max-width: 420px;
+        margin: 0 auto;
+      }
+      .map-key-row input {
+        flex: 1;
+        padding: 10px 14px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface2);
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      .hotspot-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-height: 560px;
+        overflow-y: auto;
+      }
+      .hotspot-item {
+        padding: 14px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface2);
+        cursor: pointer;
+        transition:
+          border-color 0.2s ease,
+          transform 0.15s ease;
+      }
+      .hotspot-item:hover {
+        border-color: rgba(249, 115, 22, 0.35);
+        transform: translateY(-1px);
+      }
+      .hotspot-item-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+      .hotspot-item-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .hotspot-item-meta {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text3);
+        line-height: 1.6;
+      }
+      .hotspot-count {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: #f97316;
+        background: rgba(249, 115, 22, 0.12);
+        border: 1px solid rgba(249, 115, 22, 0.25);
+      }
+
+      body.light-theme .geo-badge {
+        background: rgba(14, 165, 233, 0.08);
+      }
+
+      @media (max-width: 1024px) {
+        .hotspot-layout {
+          grid-template-columns: 1fr;
+        }
+        #hotspotMap {
+          height: 400px;
+        }
+        .hotspot-list {
+          max-height: none;
+        }
+      }
+
+      /* Toast */
+      .toast-wrap {
+        position: fixed;
+        top: 84px;
+        right: 24px;
+        z-index: 999;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .toast {
+        padding: 14px 18px;
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        font-weight: 500;
+        background: var(--elevated);
+        backdrop-filter: blur(16px);
+        border: 1px solid var(--border);
+        color: var(--text);
+        box-shadow: var(--shadow);
+        animation: toastIn 0.35s cubic-bezier(0.34, 1.2, 0.64, 1);
+        max-width: 340px;
+      }
+      .toast.success {
+        border-color: var(--border-glow);
+        color: var(--accent);
+      }
+      .toast.error {
+        border-color: rgba(248, 113, 113, 0.4);
+        color: var(--danger);
+      }
+      @keyframes toastIn {
+        from {
+          opacity: 0;
+          transform: translateX(12px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      .empty {
+        text-align: center;
+        padding: 56px 20px;
+        color: var(--text3);
+        font-size: 14px;
+      }
+      .empty svg {
+        width: 48px;
+        height: 48px;
+        margin: 0 auto 14px;
+        display: block;
+        opacity: 0.25;
+      }
+
+      /* Responsive */
+      @media (max-width: 1024px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+        .sidebar {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          padding: 12px 16px;
+          border-right: none;
+          border-bottom: 1px solid var(--border);
+        }
+        .nav-section {
+          display: none;
+        }
+        .nav-item {
+          margin: 0;
+          padding: 8px 14px;
+          font-size: 13px;
+        }
+        .sidebar-footer {
+          display: none;
+        }
+        .main {
+          padding: 24px 20px 40px;
+        }
+        .predict-layout,
+        .two-col,
+        .stats-grid,
+        .feature-grid,
+        .color-ref-grid,
+        .hotspot-layout {
+          grid-template-columns: 1fr;
+        }
+        .stats-grid .stat-box:nth-child(n) {
+          grid-column: auto;
+        }
+      }
+      @media (max-width: 640px) {
+        .header {
+          padding: 0 16px;
+          height: 60px;
+        }
+        .header-badge {
+          display: none;
+        }
+        .aqi-hero {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+      body.light-theme .header {
+        background: rgba(255, 255, 255, 0.78);
+        border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+      }
+
+      body.light-theme .sidebar {
+        background: rgba(255, 255, 255, 0.65);
+        border-right: 1px solid rgba(15, 23, 42, 0.08);
+      }
+
+      body.light-theme .nav-item {
+        color: #334155;
+      }
+
+      body.light-theme .nav-item:hover {
+        background: rgba(14, 165, 233, 0.08);
+        color: #0f172a;
+      }
+
+      body.light-theme .nav-item.active {
+        background: rgba(14, 165, 233, 0.12);
+        color: #0284c7;
+        border-color: rgba(14, 165, 233, 0.18);
+      }
+
+      body.light-theme .status-chip {
+        background: rgba(255, 255, 255, 0.9);
+        color: #334155;
+      }
+
+      body.light-theme .card,
+      body.light-theme .stat-box,
+      body.light-theme .metric-card {
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(15, 23, 42, 0.06);
+      }
+
+      body.light-theme .upload-zone {
+        background: rgba(255, 255, 255, 0.5);
+      }
+
+      body.light-theme .page-header h1 {
+        background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      body.light-theme .table-wrap table {
+        color: #1e293b;
+      }
+
+      body.light-theme th {
+        background: rgba(15, 23, 42, 0.04);
+      }
+
+      body.light-theme td {
+        color: #334155;
+      }
+
+      body.light-theme .ambient-grid {
+        opacity: 0.6;
+      }
+      body.light-theme .code-block {
+        background: rgba(15, 23, 42, 0.04);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        color: #334155;
+      }
+
+      body.light-theme .code-block .cmt {
+        color: #64748b;
+      }
+
+      /* Workflow diagram (About page) */
+      .workflow-diagram {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        padding: 12px 0 4px;
+        max-width: 460px;
+        margin: 0 auto;
+      }
+      .workflow-step {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        width: 100%;
+        padding: 14px 18px;
+        border-radius: var(--radius-sm);
+        background: var(--surface2);
+        border: 1px solid var(--border);
+      }
+      .workflow-icon {
+        width: 40px;
+        height: 40px;
+        flex-shrink: 0;
+        border-radius: 50%;
+        background: var(--accent-dim);
+        border: 1px solid var(--border-glow);
+        display: grid;
+        place-items: center;
+        color: var(--accent);
+      }
+      .workflow-icon svg {
+        width: 20px;
+        height: 20px;
+      }
+      .workflow-title {
+        font-weight: 600;
+        font-size: 14px;
+        color: var(--text);
+      }
+      .workflow-sub {
+        font-size: 12px;
+        color: var(--text2);
+        margin-top: 2px;
+      }
+      .workflow-arrow {
+        color: var(--text3);
+        font-size: 15px;
+        line-height: 1;
+      }
+
+      /* Skeleton loading */
+      .skeleton {
+        border-radius: 8px;
+        background: linear-gradient(
+          100deg,
+          var(--surface2) 30%,
+          var(--elevated) 50%,
+          var(--surface2) 70%
+        );
+        background-size: 240% 100%;
+        animation: shimmer 1.4s ease-in-out infinite;
+      }
+      @keyframes shimmer {
+        0% {
+          background-position: 120% 0;
+        }
+        100% {
+          background-position: -20% 0;
+        }
+      }
+      .skeleton-row {
+        display: flex;
+        gap: 12px;
+        padding: 12px 14px;
+        align-items: center;
+      }
+      .skeleton-row .skeleton {
+        height: 14px;
+      }
+      .skeleton-stat {
+        height: 64px;
+        border-radius: var(--radius);
+      }
+
+      /* Modal (delete confirmation) */
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(3, 6, 12, 0.6);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        animation: fadeIn 0.2s ease;
+      }
+      .modal-box {
+        width: 100%;
+        max-width: 380px;
+        margin: 16px;
+        background: var(--elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 24px;
+        animation: toastIn 0.25s cubic-bezier(0.34, 1.2, 0.64, 1);
+      }
+      .modal-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: rgba(248, 113, 113, 0.12);
+        border: 1px solid rgba(248, 113, 113, 0.3);
+        display: grid;
+        place-items: center;
+        color: var(--danger);
+        margin-bottom: 14px;
+      }
+      .modal-icon svg {
+        width: 22px;
+        height: 22px;
+      }
+      .modal-title {
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 16px;
+        margin-bottom: 8px;
+      }
+      .modal-body {
+        font-size: 13px;
+        color: var(--text2);
+        line-height: 1.6;
+        margin-bottom: 20px;
+      }
+      .modal-thumb {
+        width: 100%;
+        height: 120px;
+        object-fit: cover;
+        border-radius: var(--radius-sm);
+        margin-bottom: 14px;
+        border: 1px solid var(--border);
+      }
+      .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
+      /* History toolbar */
+      .history-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+      .search-input-wrap {
+        position: relative;
+        flex: 1;
+        min-width: 180px;
+        max-width: 320px;
+      }
+      .search-input-wrap svg {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 14px;
+        height: 14px;
+        color: var(--text3);
+      }
+      .search-input-wrap input {
+        width: 100%;
+        padding: 9px 12px 9px 34px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface2);
+        color: var(--text);
+        font-size: 13px;
+        font-family: var(--font);
+      }
+      .search-input-wrap input:focus {
+        outline: none;
+        border-color: var(--border-glow);
+      }
+      th.sortable {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+      }
+      th.sortable:hover {
+        color: var(--text2);
+      }
+      th.sortable .sort-arrow {
+        margin-left: 4px;
+        opacity: 0.5;
+      }
+      th.sortable.active .sort-arrow {
+        opacity: 1;
+        color: var(--accent);
+      }
+      .row-thumb {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        object-fit: cover;
+        border: 1px solid var(--border);
+        background: var(--surface2);
+        flex-shrink: 0;
+      }
+      .file-cell {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .pagination-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 16px;
+        flex-wrap: wrap;
+      }
+      .pagination-info {
+        font-size: 12px;
+        color: var(--text3);
+        font-family: var(--mono);
+      }
+      .pagination-btns {
+        display: flex;
+        gap: 6px;
+      }
+
+      /* Hotspot map markers legend + info banner */
+      .map-legend {
+        display: flex;
+        gap: 16px;
+        padding: 10px 20px;
+        border-top: 1px solid var(--border);
+        font-size: 12px;
+        color: var(--text2);
+        flex-wrap: wrap;
+      }
+      .map-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .map-legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .map-info-banner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 20px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(56, 189, 248, 0.08);
+        font-size: 12px;
+        color: var(--text2);
+      }
+      .map-info-banner svg {
+        width: 15px;
+        height: 15px;
+        color: var(--accent2);
+        flex-shrink: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ambient"><div class="ambient-grid"></div></div>
+    <div class="toast-wrap" id="toastWrap"></div>
+    <div id="modalRoot"></div>
+
+    <div class="app">
+      <header class="header">
+        <div class="brand">
+          <div class="brand-icon">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+            >
+              <path
+                d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
+              />
+              <circle cx="12" cy="12" r="4" />
+            </svg>
+          </div>
+          <div>
+            <div class="header-logo">Air<span>Vision</span>Net</div>
+            <div class="header-tagline">
+              AI-Based Air Quality Estimation from Outdoor Images
+            </div>
+          </div>
+        </div>
+        <div class="header-badge">AirVisionNet · v2</div>
+        <div class="header-right">
+          <span
+            class="model-chip"
+            id="modelChip"
+            title="Prediction engine status"
+            >AI Engine</span
+          >
+          <button class="btn btn-sm" onclick="toggleTheme()" id="themeBtn">
+            🌙 Dark
+          </button>
+
+          <div class="status-chip">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Checking…</span>
+          </div>
+        </div>
+      </header>
+
+      <nav class="sidebar">
+        <div class="nav-section">Workspace</div>
+        <div
+          class="nav-item active"
+          data-page="predict"
+          onclick="showPage('predict')"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+          >
+            <path
+              d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"
+            />
+          </svg>
+          Predict
+        </div>
+        <div class="nav-item" data-page="history" onclick="showPage('history')">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3 3" />
+          </svg>
+          History
+        </div>
+        <div
+          class="nav-item"
+          data-page="analytics"
+          onclick="showPage('analytics')"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+          >
+            <path d="M3 20h18M5 20V14m4 6V10m4 10V6m4 14v-4" />
+          </svg>
+          Analytics
+        </div>
+        <div
+          class="nav-item"
+          data-page="hotspots"
+          onclick="showPage('hotspots')"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+          >
+            <path d="M12 21s7-4.5 7-11a7 7 0 10-14 0c0 6.5 7 11 7 11z" />
+            <circle cx="12" cy="10" r="2.5" />
+          </svg>
+          Hotspot Map
+        </div>
+        <div class="nav-section">Reference</div>
+        <div
+          class="nav-item"
+          data-page="standards"
+          onclick="showPage('standards')"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+          >
+            <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+            <path
+              d="M6.5 2H20v20H6.5A2.5 2.5 0 004 19.5v-15A2.5 2.5 0 016.5 2z"
+            />
+          </svg>
+          AQI Standards
+        </div>
+        <div class="nav-item" data-page="about" onclick="showPage('about')">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 16v-4M12 8h.01" />
+          </svg>
+          About
+        </div>
+        <div class="sidebar-footer">
+          <p>
+            <strong>CPCB-aligned</strong> AQI from PM2.5 & PM10 estimates.
+            Powered by <strong>AirVisionNet's</strong> day &amp; night vision
+            models.
+          </p>
+        </div>
+      </nav>
+
+      <main class="main">
+        <!-- PREDICT -->
+        <div class="page active" id="page-predict">
+          <div class="page-header">
+            <h1>Estimate air quality</h1>
+            <p>
+              Upload an outdoor image captured during the day or night.
+              AirVisionNet analyzes atmospheric visual features and predicts
+              PM2.5, PM10, and the corresponding AQI.
+            </p>
+          </div>
+          <div class="step-strip" id="stepStrip">
+            <div class="step-pill active" id="step1">
+              <span class="step-num">1</span> Upload image
+            </div>
+            <div class="step-pill" id="step2">
+              <span class="step-num">2</span> Run inference
+            </div>
+            <div class="step-pill" id="step3">
+              <span class="step-num">3</span> View AQI
+            </div>
+          </div>
+          <div class="predict-layout">
+            <div class="card">
+              <div class="card-title">Outdoor image</div>
+              <div class="upload-zone" id="dropzone">
+                <input
+                  type="file"
+                  accept="image/*"
+                  id="fileInput"
+                  onchange="handleFile(event)"
+                />
+                <div class="upload-icon-wrap">
+                  <svg
+                    class="upload-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12V4m0 0L8 8m4-4l4 4"
+                    />
+                  </svg>
+                </div>
+                <div class="upload-title">Drop image or click to browse</div>
+                <div class="upload-sub">JPEG, PNG, or TIFF</div>
+                <div class="upload-hint">
+                  Supports Day & Night Outdoor Images • Auto Prediction •
+                  1024×1024 Processing
+                </div>
+              </div>
+              <div id="previewSection" style="display: none; margin-top: 20px">
+                <div class="preview-wrap">
+                  <img id="previewImg" class="preview-img" alt="Preview" />
+                  <div
+                    class="preview-overlay"
+                    id="loadingOverlay"
+                    style="display: none"
+                  >
+                    <div class="spinner"></div>
+                    <span class="loading-label">Running inference…</span>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button
+                    class="btn btn-accent"
+                    onclick="runPredict()"
+                    id="predictBtn"
+                  >
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <polygon points="5 3 19 12 5 21" />
+                    </svg>
+                    Run Prediction
+                  </button>
+                  <button class="btn" onclick="clearPreview()">Clear</button>
+                </div>
+                <div class="geo-badge missing" id="geoBadge">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      d="M12 21s7-4.5 7-11a7 7 0 10-14 0c0 6.5 7 11 7 11z"
+                    />
+                    <circle cx="12" cy="10" r="2.5" />
+                  </svg>
+                  <span id="geoBadgeText">No GPS data in image</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card result-panel" id="resultCol">
+              <div class="card-title">Results</div>
+              <div id="resultEmpty" class="result-empty">
+                <div class="result-empty-icon">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M9 17H4a2 2 0 01-2-2V4a2 2 0 012-2h16a2 2 0 012 2v7M15 21l5-5m0 0l-5-5m5 5H9"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  Upload an image and run prediction<br />to see PM levels and
+                  AQI
+                </div>
+              </div>
+              <div id="resultContent" style="display: none">
+                <div
+                  class="hotspot-alert"
+                  id="hotspotAlert"
+                  style="display: none"
+                >
+                  <div class="hotspot-alert-text">
+                    <strong>Pollution hotspot detected.</strong>
+                    This geotagged outdoor image shows Poor or worse AQI and has
+                    been marked on the map.
+                  </div>
+                  <button class="btn btn-sm" onclick="showPage('hotspots')">
+                    View on map
+                  </button>
+                </div>
+                <div class="result-banner" id="resultBanner">
+                  Inference complete using AirVisionNet's vision model.
+                </div>
+                <div class="aqi-hero" id="aqiBanner">
+                  <div class="aqi-ring-wrap">
+                    <div class="aqi-ring" id="aqiRing">
+                      <div class="aqi-ring-inner">
+                        <div class="aqi-ring-label">AQI</div>
+                        <div class="aqi-num" id="resAQI">—</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="aqi-hero-text">
+                    <div class="aqi-category" id="resCat">—</div>
+                    <div class="health-msg" id="resHealth">—</div>
+                  </div>
+                </div>
+                <div class="result-grid">
+                  <div class="metric-card" id="cardPM25">
+                    <div class="metric-label">PM2.5</div>
+                    <div class="metric-value" id="resPM25">
+                      —<span class="metric-unit">µg/m³</span>
+                    </div>
+                    <div class="metric-sub">
+                      Sub-AQI: <strong id="resAQI25">—</strong>
+                    </div>
+                  </div>
+                  <div class="metric-card" id="cardPM10">
+                    <div class="metric-label">PM10</div>
+                    <div class="metric-value" id="resPM10">
+                      —<span class="metric-unit">µg/m³</span>
+                    </div>
+                    <div class="metric-sub">
+                      Sub-AQI: <strong id="resAQI10">—</strong>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  class="card"
+                  id="groundTruthCard"
+                  style="margin-top: 20px; display: none"
+                >
+                  <div class="card-title">Ground Truth vs Prediction</div>
+
+                  <table class="std-table">
+                    <tbody>
+                      <tr>
+                        <td><strong>Capture Time</strong></td>
+                        <td id="captureTime">Not Available</td>
+                      </tr>
+
+                      <tr>
+                        <td><strong>Actual PM2.5</strong></td>
+                        <td id="actualPM25">Not Available</td>
+                      </tr>
+
+                      <tr>
+                        <td><strong>Predicted PM2.5</strong></td>
+                        <td id="predPM25">-</td>
+                      </tr>
+
+                      <tr>
+                        <td><strong>PM2.5 Error</strong></td>
+                        <td id="pm25Error">-</td>
+                      </tr>
+
+                      <tr>
+                        <td><strong>PM2.5 Accuracy</strong></td>
+                        <td id="pm25Accuracy">-</td>
+                      </tr>
+
+                      <tr>
+                        <td><strong>Actual PM10</strong></td>
+                        <td id="actualPM10">Not Available</td>
+                      </tr>
+
+                      <tr>
+                        <td><strong>Predicted PM10</strong></td>
+                        <td id="predPM10">-</td>
+                      </tr>
+
+                      <tr>
+                        <td><strong>PM10 Error</strong></td>
+                        <td id="pm10Error">-</td>
+                      </tr>
+
+                      <tr>
+                        <td><strong>PM10 Accuracy</strong></td>
+                        <td id="pm10Accuracy">-</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="gauge-section">
+                  <div class="gauge-label">CPCB scale</div>
+                  <div class="gauge-track">
+                    <div
+                      class="gauge-needle"
+                      id="gaugeNeedle"
+                      style="left: 0%"
+                    ></div>
+                  </div>
+                  <div class="gauge-labels">
+                    <span>Good</span><span>Satisfactory</span
+                    ><span>Moderate</span><span>Poor</span><span>Very Poor</span
+                    ><span>Severe</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="margin-top: 20px">
+            <div class="card-title">Tips for best results</div>
+            <div class="tips-list">
+              <div class="tip-item">
+                <span class="tip-dot"></span>
+                <span
+                  >Use clear outdoor images (day or night) with visible sky,
+                  haze, or atmospheric features.</span
+                >
+              </div>
+              <div class="tip-item">
+                <span class="tip-dot"></span>
+                <span
+                  >JPEG and PNG work best; images are normalized to 1024×1024
+                  before inference.</span
+                >
+              </div>
+              <div class="tip-item">
+                <span class="tip-dot"></span>
+                <span
+                  >Overall AQI follows CPCB rules: max of PM2.5 and PM10
+                  sub-indices.</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- HOTSPOT MAP -->
+        <div class="page" id="page-hotspots">
+          <div class="page-header">
+            <h1>Pollution hotspot map</h1>
+            <p>
+              Geotagged outdoor images with Poor, Very Poor, or Severe AQI are
+              automatically marked as high-pollution hotspots on Google Maps.
+            </p>
+          </div>
+          <div class="hotspot-layout">
+            <div class="card map-card">
+              <div class="map-toolbar">
+                <div>
+                  <div class="map-toolbar-title">Google Maps overlay</div>
+                  <span class="hotspot-count" id="hotspotCount"
+                    >0 hotspots</span
+                  >
+                </div>
+                <div class="map-filters">
+                  <button
+                    class="filter-chip hotspot-filter active"
+                    id="filterHotspots"
+                    onclick="setMapFilter('hotspots')"
+                  >
+                    Hotspots only
+                  </button>
+                  <button
+                    class="filter-chip"
+                    id="filterAllGeo"
+                    onclick="setMapFilter('all')"
+                  >
+                    All geotagged
+                  </button>
+                </div>
+              </div>
+              <div
+                class="map-info-banner"
+                id="mapInfoBanner"
+                style="display: none"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 16v-4M12 8h.01" />
+                </svg>
+                <span id="mapInfoBannerText"></span>
+              </div>
+              <div id="hotspotMap"></div>
+              <div class="map-setup" id="mapSetup" style="display: none">
+                <h3>Google Maps API key required</h3>
+                <p>
+                  Set <span class="inline-code">GOOGLE_MAPS_API_KEY</span> in
+                  your environment, or paste a key below to load the hotspot
+                  map.
+                </p>
+                <div class="map-key-row">
+                  <input
+                    type="text"
+                    id="mapsKeyInput"
+                    placeholder="AIza..."
+                    autocomplete="off"
+                  />
+                  <button class="btn btn-accent btn-sm" onclick="saveMapsKey()">
+                    Load map
+                  </button>
+                </div>
+              </div>
+              <div class="map-legend">
+                <span class="map-legend-item"
+                  ><span
+                    class="map-legend-dot"
+                    style="background: #dc2626"
+                  ></span
+                  >Pollution hotspot</span
+                >
+                <span class="map-legend-item"
+                  ><span
+                    class="map-legend-dot"
+                    style="background: #38bdf8"
+                  ></span
+                  >Image GPS location</span
+                >
+                <span class="map-legend-item"
+                  ><span
+                    class="map-legend-dot"
+                    style="background: #22c55e"
+                  ></span
+                  >Your current location</span
+                >
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">Hotspot areas</div>
+              <div class="hotspot-list" id="hotspotList">
+                <div class="empty"><div>Loading hotspots…</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- HISTORY -->
+        <div class="page" id="page-history">
+          <div class="page-header">
+            <h1>Prediction history</h1>
+            <p>Every run saved locally — newest first.</p>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">Records</div>
+              <div class="btn-row">
+                <button class="btn btn-sm" onclick="exportCSV()">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"
+                    />
+                  </svg>
+                  Export CSV
+                </button>
+                <button class="btn btn-sm" onclick="loadHistory()">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M23 4v6h-6M1 20v-6h6" />
+                    <path
+                      d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+                    />
+                  </svg>
+                  Refresh
+                </button>
+              </div>
+            </div>
+            <div class="history-toolbar">
+              <div class="search-input-wrap">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M21 21l-4.3-4.3" />
+                </svg>
+                <input
+                  type="text"
+                  id="historySearch"
+                  placeholder="Search by file name or category…"
+                  oninput="onHistorySearch()"
+                />
+              </div>
+            </div>
+            <div class="table-wrap" id="historyTable">
+              <div class="empty"><div>Loading…</div></div>
+            </div>
+            <div
+              class="pagination-bar"
+              id="paginationBar"
+              style="display: none"
+            >
+              <div class="pagination-info" id="paginationInfo"></div>
+              <div class="pagination-btns">
+                <button
+                  class="btn btn-sm"
+                  id="prevPageBtn"
+                  onclick="changePage(-1)"
+                >
+                  ← Prev
+                </button>
+                <button
+                  class="btn btn-sm"
+                  id="nextPageBtn"
+                  onclick="changePage(1)"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ANALYTICS -->
+        <div class="page" id="page-analytics">
+          <div class="page-header">
+            <h1>Analytics</h1>
+            <p>Trends and distribution across all stored predictions.</p>
+          </div>
+          <div class="stats-grid" id="statsGrid">
+            <div class="stat-box">
+              <div class="stat-num">—</div>
+              <div class="stat-lbl">Total predictions</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-num">—</div>
+              <div class="stat-lbl">Avg PM2.5 (µg/m³)</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-num">—</div>
+              <div class="stat-lbl">Avg PM10 (µg/m³)</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-num">—</div>
+              <div class="stat-lbl">Avg AQI</div>
+            </div>
+          </div>
+          <div class="two-col">
+            <div class="card">
+              <div class="card-title">PM2.5 over time</div>
+              <div class="chart-wrap">
+                <canvas
+                  id="pm25Chart"
+                  role="img"
+                  aria-label="PM2.5 values over time"
+                ></canvas>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">PM10 over time</div>
+              <div class="chart-wrap">
+                <canvas
+                  id="pm10Chart"
+                  role="img"
+                  aria-label="PM10 values over time"
+                ></canvas>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="margin-top: 20px">
+            <div class="card-title">AQI category distribution</div>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 1fr 220px;
+                gap: 24px;
+                align-items: center;
+              "
+            >
+              <div class="chart-wrap">
+                <canvas
+                  id="catChart"
+                  role="img"
+                  aria-label="AQI category distribution"
+                ></canvas>
+              </div>
+              <div id="catLegend"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STANDARDS -->
+        <div class="page" id="page-standards">
+          <div class="page-header">
+            <h1>AQI standards</h1>
+            <p>
+              CPCB breakpoints used for Government of India air quality
+              reporting.
+            </p>
+          </div>
+          <div class="two-col">
+            <div class="card">
+              <div class="card-title">PM2.5 breakpoints (µg/m³)</div>
+              <table class="std-table">
+                <thead>
+                  <tr>
+                    <th>Range</th>
+                    <th>AQI</th>
+                    <th>Category</th>
+                    <th>Health</th>
+                  </tr>
+                </thead>
+                <tbody id="pm25StdTable"></tbody>
+              </table>
+            </div>
+            <div class="card">
+              <div class="card-title">PM10 breakpoints (µg/m³)</div>
+              <table class="std-table">
+                <thead>
+                  <tr>
+                    <th>Range</th>
+                    <th>AQI</th>
+                    <th>Category</th>
+                  </tr>
+                </thead>
+                <tbody id="pm10StdTable"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card" style="margin-top: 20px">
+            <div class="card-title">Color reference</div>
+            <div class="color-ref-grid" id="colorRef"></div>
+          </div>
+        </div>
+
+        <!-- ABOUT -->
+        <div class="page" id="page-about">
+          <div class="page-header">
+            <h1>About AirVisionNet</h1>
+            <p>
+              AirVisionNet is a deep learning-based computer vision framework
+              for estimating PM2.5, PM10, and Air Quality Index (AQI) from
+              outdoor images captured during both daytime and nighttime. The
+              system provides CPCB-compliant AQI estimation, geotag-based
+              pollution hotspot mapping, historical analytics, and an
+              interactive web dashboard.
+            </p>
+          </div>
+          <div class="full-col">
+            <div class="card">
+              <div class="card-title">How a prediction works</div>
+              <div class="workflow-diagram" id="workflowDiagram">
+                <div class="workflow-step">
+                  <div class="workflow-icon">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.6"
+                    >
+                      <rect x="3" y="5" width="18" height="14" rx="2" />
+                      <circle cx="8.5" cy="10.5" r="1.5" />
+                      <path d="M21 15l-5-5L5 19" />
+                    </svg>
+                  </div>
+                  <div class="workflow-text">
+                    <div class="workflow-title">Outdoor image</div>
+                    <div class="workflow-sub">
+                      You upload a day or night outdoor photo
+                    </div>
+                  </div>
+                </div>
+                <div class="workflow-arrow">↓</div>
+                <div class="workflow-step">
+                  <div class="workflow-icon">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.6"
+                    >
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l3 3" />
+                    </svg>
+                  </div>
+                  <div class="workflow-text">
+                    <div class="workflow-title">Date &amp; time detection</div>
+                    <div class="workflow-sub">
+                      Capture time is read from image metadata
+                    </div>
+                  </div>
+                </div>
+                <div class="workflow-arrow">↓</div>
+                <div class="workflow-step">
+                  <div class="workflow-icon">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.6"
+                    >
+                      <circle cx="12" cy="12" r="4" />
+                      <path
+                        d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
+                      />
+                    </svg>
+                  </div>
+                  <div class="workflow-text">
+                    <div class="workflow-title">
+                      Automatic day/night model selection
+                    </div>
+                    <div class="workflow-sub">
+                      The right vision model is chosen for lighting conditions
+                    </div>
+                  </div>
+                </div>
+                <div class="workflow-arrow">↓</div>
+                <div class="workflow-step">
+                  <div class="workflow-icon">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.6"
+                    >
+                      <path d="M3 20h18M5 20V14m4 6V10m4 10V6m4 14v-4" />
+                    </svg>
+                  </div>
+                  <div class="workflow-text">
+                    <div class="workflow-title">
+                      PM2.5 &amp; PM10 prediction
+                    </div>
+                    <div class="workflow-sub">
+                      Particulate concentration is estimated from visual
+                      features
+                    </div>
+                  </div>
+                </div>
+                <div class="workflow-arrow">↓</div>
+                <div class="workflow-step">
+                  <div class="workflow-icon">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.6"
+                    >
+                      <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+                      <path
+                        d="M6.5 2H20v20H6.5A2.5 2.5 0 004 19.5v-15A2.5 2.5 0 016.5 2z"
+                      />
+                    </svg>
+                  </div>
+                  <div class="workflow-text">
+                    <div class="workflow-title">AQI calculation</div>
+                    <div class="workflow-sub">
+                      Converted to CPCB Air Quality Index and category
+                    </div>
+                  </div>
+                </div>
+                <div class="workflow-arrow">↓</div>
+                <div class="workflow-step">
+                  <div class="workflow-icon">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.6"
+                    >
+                      <path
+                        d="M12 21s7-4.5 7-11a7 7 0 10-14 0c0 6.5 7 11 7 11z"
+                      />
+                      <circle cx="12" cy="10" r="2.5" />
+                    </svg>
+                  </div>
+                  <div class="workflow-text">
+                    <div class="workflow-title">Geo-tag hotspot detection</div>
+                    <div class="workflow-sub">
+                      Poor-or-worse readings with location data are flagged as
+                      hotspots
+                    </div>
+                  </div>
+                </div>
+                <div class="workflow-arrow">↓</div>
+                <div class="workflow-step">
+                  <div class="workflow-icon">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.6"
+                    >
+                      <path d="M3 3v18h18M7 15l4-5 3 3 5-7" />
+                    </svg>
+                  </div>
+                  <div class="workflow-text">
+                    <div class="workflow-title">Analytics dashboard</div>
+                    <div class="workflow-sub">
+                      Every result is saved and tracked over time
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">What AirVisionNet measures</div>
+              <div class="feature-grid">
+                <div class="feature-card">
+                  <div class="label" style="color: var(--accent)">PM2.5</div>
+                  <p>
+                    Fine particulate matter under 2.5 microns — the main driver
+                    of respiratory health impact.
+                  </p>
+                </div>
+                <div class="feature-card">
+                  <div class="label" style="color: var(--accent2)">PM10</div>
+                  <p>
+                    Coarser particulate matter under 10 microns, including dust
+                    and pollen.
+                  </p>
+                </div>
+                <div class="feature-card">
+                  <div class="label" style="color: var(--warm)">AQI</div>
+                  <p>
+                    A single CPCB-aligned score combining both, with a health
+                    category from Good to Severe.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      function applyTheme(theme) {
+        const body = document.body;
+        const btn = document.getElementById("themeBtn");
+
+        if (theme === "light") {
+          body.classList.add("light-theme");
+
+          if (btn) {
+            btn.innerHTML = "☀️ Light";
+          }
+        } else {
+          body.classList.remove("light-theme");
+
+          if (btn) {
+            btn.innerHTML = "🌙 Dark";
+          }
+        }
+
+        localStorage.setItem("theme", theme);
+      }
+
+      function toggleTheme() {
+        const isLight = document.body.classList.contains("light-theme");
+
+        if (isLight) {
+          applyTheme("dark");
+        } else {
+          applyTheme("light");
+        }
+      }
+
+      window.addEventListener("DOMContentLoaded", () => {
+        const savedTheme = localStorage.getItem("theme") || "dark";
+        applyTheme(savedTheme);
+      });
+      const BACKEND = "http://127.0.0.1:5051";
+      const API = (() => {
+        if (window.location.protocol === "file:") return `${BACKEND}/api`;
+        if (window.location.port === "5051")
+          return `${window.location.origin}/api`;
+        if (
+          window.location.hostname === "127.0.0.1" &&
+          window.location.port === "5051"
+        ) {
+          return `${window.location.origin}/api`;
+        }
+        return `${BACKEND}/api`;
+      })();
+
+      async function apiJson(path, options = {}) {
+        let resp;
+        try {
+          resp = await fetch(API + path, options);
+        } catch {
+          throw new Error(
+            `Cannot reach backend at ${BACKEND}. Run: python app.py`,
+          );
+        }
+        const text = await resp.text();
+        const trimmed = text.trimStart();
+        if (trimmed.startsWith("<") || trimmed.startsWith("<!DOCTYPE")) {
+          throw new Error(
+            "Got HTML instead of JSON — open http://localhost:5051 (Flask serves UI + API). Do not use Live Server or open index.html as a file.",
+          );
+        }
+        let data;
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch {
+          throw new Error("Backend returned invalid JSON.");
+        }
+        if (!resp.ok)
+          throw new Error(data.error || `Request failed (${resp.status})`);
+        return data;
+      }
+
+      // Maps the backend's internal weights-file names to a user-facing
+      // label. The filenames themselves are never rendered in the UI.
+      const MODEL_LABELS = {
+        LightairnetMainModel: "day-vision",
+        MainModel_2: "night-vision",
+      };
+      function friendlyModelLabel(modelUsed) {
+        if (!modelUsed) return "vision";
+        const key = modelUsed.replace(/\.h5$/i, "");
+        return MODEL_LABELS[key] || "vision";
+      }
+
+      const AQI_META = {
+        Good: {
+          color: "#22c55e",
+          bg: "rgba(34,197,94,0.12)",
+          health: "Minimal impact on health.",
+        },
+        Satisfactory: {
+          color: "#84cc16",
+          bg: "rgba(132,204,22,0.12)",
+          health: "Minor discomfort to sensitive individuals.",
+        },
+        Moderate: {
+          color: "#eab308",
+          bg: "rgba(234,179,8,0.12)",
+          health: "Discomfort to asthma patients & elderly.",
+        },
+        Poor: {
+          color: "#f97316",
+          bg: "rgba(249,115,22,0.12)",
+          health: "Breathing discomfort on prolonged exposure.",
+        },
+        "Very Poor": {
+          color: "#a855f7",
+          bg: "rgba(168,85,247,0.12)",
+          health: "Respiratory illness risk on prolonged exposure.",
+        },
+        Severe: {
+          color: "#dc2626",
+          bg: "rgba(220,38,38,0.15)",
+          health: "Serious health effects; avoid outdoor activity.",
+        },
+      };
+
+      function aqiToPos(aqi) {
+        if (aqi <= 50) return (aqi / 50) * 16.67;
+
+        if (aqi <= 100) return 16.67 + ((aqi - 50) / 50) * 16.67;
+
+        if (aqi <= 200) return 33.34 + ((aqi - 100) / 100) * 16.66;
+
+        if (aqi <= 300) return 50 + ((aqi - 200) / 100) * 16.67;
+
+        if (aqi <= 400) return 66.67 + ((aqi - 300) / 100) * 16.66;
+
+        return 83.33 + ((aqi - 400) / 100) * 16.67;
+      }
+
+      function showPage(id) {
+        document
+          .querySelectorAll(".page")
+          .forEach((p) => p.classList.remove("active"));
+        document
+          .querySelectorAll(".nav-item")
+          .forEach((n) => n.classList.remove("active"));
+        document.getElementById("page-" + id).classList.add("active");
+        document.querySelector(`[data-page="${id}"]`).classList.add("active");
+        if (id === "history") loadHistory();
+        if (id === "analytics") loadAnalytics();
+        if (id === "standards") loadStandards();
+        if (id === "hotspots") loadHotspotMap();
+      }
+
+      function toast(msg, type = "") {
+        const el = document.createElement("div");
+        el.className = "toast " + type;
+        el.textContent = msg;
+        document.getElementById("toastWrap").appendChild(el);
+        setTimeout(() => el.remove(), 3500);
+      }
+
+      function setStep(step) {
+        ["step1", "step2", "step3"].forEach((id, i) => {
+          const el = document.getElementById(id);
+          el.classList.remove("active", "done");
+          if (i + 1 < step) el.classList.add("done");
+          else if (i + 1 === step) el.classList.add("active");
+        });
+      }
+
+      async function checkHealth() {
+        try {
+          const d = await apiJson("/health");
+          const dot = document.getElementById("statusDot");
+          const txt = document.getElementById("statusText");
+          if (d.model_loaded) {
+            dot.classList.remove("offline");
+            txt.textContent = "Model ready";
+          } else {
+            dot.classList.add("offline");
+            txt.textContent = d.model_error ? "Model error" : "Model offline";
+          }
+        } catch {
+          document.getElementById("statusDot").classList.add("offline");
+          document.getElementById("statusText").textContent = "Backend offline";
+        }
+      }
+      checkHealth();
+      setInterval(checkHealth, 10000);
+
+      let currentFile = null;
+      let lastPrediction = null;
+      const dropzone = document.getElementById("dropzone");
+      dropzone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        dropzone.classList.add("drag");
+      });
+      dropzone.addEventListener("dragleave", () =>
+        dropzone.classList.remove("drag"),
+      );
+      dropzone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dropzone.classList.remove("drag");
+        const f = e.dataTransfer.files[0];
+        if (f) loadFile(f);
+      });
+
+      function handleFile(e) {
+        loadFile(e.target.files[0]);
+      }
+
+      let currentImageGPS = null; // {lat, lng} from EXIF, or null if the image has no GPS tag
+
+      function setGeoBadge(state, text) {
+        const badge = document.getElementById("geoBadge");
+        const label = document.getElementById("geoBadgeText");
+        badge.classList.remove("missing", "hotspot-ready");
+        badge.classList.add(state);
+        label.textContent = text;
+      }
+
+      async function loadFile(f) {
+        if (!f) return;
+        currentFile = f;
+        currentImageGPS = null;
+        setStep(1);
+        setGeoBadge("missing", "Checking image for GPS data…");
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          document.getElementById("previewImg").src = ev.target.result;
+          document.getElementById("previewSection").style.display = "block";
+          document.getElementById("resultContent").style.display = "none";
+          document.getElementById("resultEmpty").style.display = "block";
+          setStep(2);
+          runPredict();
+        };
+        reader.readAsDataURL(f);
+
+        try {
+          const gps = window.exifr ? await window.exifr.gps(f) : null;
+          if (gps && typeof gps.latitude === "number") {
+            currentImageGPS = { lat: gps.latitude, lng: gps.longitude };
+            setGeoBadge(
+              "hotspot-ready",
+              `GPS found · ${gps.latitude.toFixed(4)}, ${gps.longitude.toFixed(4)}`,
+            );
+          } else {
+            setGeoBadge("missing", "No GPS data in image");
+          }
+        } catch {
+          setGeoBadge("missing", "No GPS data in image");
+        }
+      }
+
+      function clearPreview() {
+        currentFile = null;
+        currentImageGPS = null;
+        setStep(1);
+        setGeoBadge("missing", "No GPS data in image");
+        document.getElementById("previewSection").style.display = "none";
+        document.getElementById("resultContent").style.display = "none";
+        document.getElementById("resultEmpty").style.display = "block";
+        document.getElementById("fileInput").value = "";
+      }
+
+      async function runPredict() {
+        if (!currentFile) {
+          toast("Please upload an image first.", "error");
+          return;
+        }
+
+        const btn = document.getElementById("predictBtn");
+        btn.disabled = true;
+        btn.textContent = "Running…";
+        document.getElementById("loadingOverlay").style.display = "flex";
+        document.getElementById("resultEmpty").style.display = "none";
+        document.getElementById("resultContent").style.display = "none";
+
+        try {
+          const fd = new FormData();
+          fd.append("image", currentFile, currentFile.name);
+          if (currentImageGPS) {
+            fd.append("latitude", currentImageGPS.lat);
+            fd.append("longitude", currentImageGPS.lng);
+          }
+          const d = await apiJson("/predict", { method: "POST", body: fd });
+          lastPrediction = d;
+
+          document.getElementById("resultBanner").innerHTML =
+            `Inference complete using AirVisionNet's <strong>${friendlyModelLabel(d.model_used)}</strong> model.`;
+          document.getElementById("hotspotAlert").style.display = d.is_hotspot
+            ? "flex"
+            : "none";
+          document.getElementById("resPM25").innerHTML =
+            d.pm25.toFixed(1) + '<span class="metric-unit">µg/m³</span>';
+          document.getElementById("resPM10").innerHTML =
+            d.pm10.toFixed(1) + '<span class="metric-unit">µg/m³</span>';
+          // Show the Ground Truth card
+          document.getElementById("groundTruthCard").style.display = "block";
+
+          // Predicted values
+          document.getElementById("predPM25").textContent =
+            d.pm25.toFixed(1) + " µg/m³";
+
+          document.getElementById("predPM10").textContent =
+            d.pm10.toFixed(1) + " µg/m³";
+
+          // Actual values
+          document.getElementById("actualPM25").textContent =
+            d.actual_pm25 !== null
+              ? d.actual_pm25.toFixed(1) + " µg/m³"
+              : "Not Available";
+
+          document.getElementById("actualPM10").textContent =
+            d.actual_pm10 !== null
+              ? d.actual_pm10.toFixed(1) + " µg/m³"
+              : "Not Available";
+
+          // Capture Time
+          document.getElementById("captureTime").textContent =
+            d.capture_time || "Not Available";
+
+          // Error
+          document.getElementById("pm25Error").textContent =
+            d.pm25_error !== null ? d.pm25_error.toFixed(2) : "-";
+
+          document.getElementById("pm10Error").textContent =
+            d.pm10_error !== null ? d.pm10_error.toFixed(2) : "-";
+
+          // Accuracy
+          document.getElementById("pm25Accuracy").textContent =
+            d.pm25_accuracy !== null
+              ? d.pm25_accuracy.toFixed(1) + "%"
+              : "Not Available";
+
+          document.getElementById("pm10Accuracy").textContent =
+            d.pm10_accuracy !== null
+              ? d.pm10_accuracy.toFixed(1) + "%"
+              : "Not Available";
+          document.getElementById("resAQI").textContent = d.aqi_overall;
+          document.getElementById("resAQI25").textContent = d.aqi_pm25;
+          document.getElementById("resAQI10").textContent = d.aqi_pm10;
+
+          const meta = AQI_META[d.aqi_category] || {
+            color: "#94a3b8",
+            bg: "rgba(148,163,184,0.1)",
+            health: "",
+          };
+          document.getElementById("resCat").textContent = d.aqi_category;
+          document.getElementById("resCat").style.color = meta.color;
+          document.getElementById("resHealth").textContent = meta.health;
+          document.getElementById("resAQI").style.color = meta.color;
+          document.getElementById("cardPM25").style.borderColor =
+            meta.color + "44";
+          document.getElementById("cardPM10").style.borderColor =
+            meta.color + "44";
+
+          const ring = document.getElementById("aqiRing");
+          const pct = aqiToPos(d.aqi_overall);
+          ring.style.setProperty("--aqi-pct", pct);
+          ring.style.setProperty("--ring-color", meta.color);
+
+          document.getElementById("gaugeNeedle").style.left = pct + "%";
+
+          document.getElementById("resultContent").style.display = "block";
+          setStep(3);
+          document.getElementById("resultContent").animate(
+            [
+              { opacity: 0, transform: "translateY(10px)" },
+              { opacity: 1, transform: "translateY(0px)" },
+            ],
+            {
+              duration: 450,
+              easing: "ease-out",
+            },
+          );
+          toast("Prediction complete", "success");
+        } catch (err) {
+          toast(err.message, "error");
+          setStep(2);
+          document.getElementById("resultEmpty").style.display = "block";
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML =
+            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21"/></svg> Run Prediction';
+          document.getElementById("loadingOverlay").style.display = "none";
+        }
+      }
+
+      // ── Hotspot map ──────────────────────────────────────────────
+      let gmap = null;
+      let mapMarkers = [];
+      let contextMarker = null; // "image GPS" or "current location" marker
+      let mapFilterMode = "hotspots";
+      let mapsConfig = null;
+      let mapsScriptLoading = null;
+
+      function loadGoogleMapsScript(key) {
+        if (window.google && window.google.maps) return Promise.resolve();
+        if (mapsScriptLoading) return mapsScriptLoading;
+        mapsScriptLoading = new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}`;
+          s.async = true;
+          s.onload = () => resolve();
+          s.onerror = () =>
+            reject(new Error("Could not load Google Maps. Check the API key."));
+          document.head.appendChild(s);
+        });
+        return mapsScriptLoading;
+      }
+
+      function pinIcon(color) {
+        return {
+          path: "M12 2C7.6 2 4 5.6 4 10c0 6 8 12 8 12s8-6 8-12c0-4.4-3.6-8-8-8z",
+          fillColor: color,
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 1.5,
+          scale: 1.5,
+          anchor: new google.maps.Point(12, 23),
+        };
+      }
+
+      function renderMapMarkers(rows) {
+        mapMarkers.forEach((m) => m.setMap(null));
+        mapMarkers = [];
+        rows.forEach((r) => {
+          const m = AQI_META[r.aqi_category] || { color: "#94a3b8" };
+          const marker = new google.maps.Marker({
+            position: { lat: r.latitude, lng: r.longitude },
+            map: gmap,
+            title: `${r.aqi_category} · AQI ${r.aqi_overall}`,
+            icon: pinIcon(r.is_hotspot ? "#dc2626" : m.color),
+          });
+          const info = new google.maps.InfoWindow({
+            content: `<div style="font-family:sans-serif;font-size:13px;color:#0f172a;min-width:160px;">
+              <strong>${r.aqi_category}</strong> · AQI ${r.aqi_overall}<br/>
+              PM2.5: ${r.pm25 != null ? r.pm25.toFixed(1) : "—"} µg/m³<br/>
+              PM10: ${r.pm10 != null ? r.pm10.toFixed(1) : "—"} µg/m³<br/>
+              <span style="color:#64748b;font-size:11px;">${new Date(r.timestamp + "Z").toLocaleString()}</span>
+            </div>`,
+          });
+          marker.addListener("click", () => info.open(gmap, marker));
+          mapMarkers.push(marker);
+        });
+      }
+
+      function setContextMarker(pos, label, color) {
+        if (contextMarker) contextMarker.setMap(null);
+        contextMarker = new google.maps.Marker({
+          position: pos,
+          map: gmap,
+          title: label,
+          icon: pinIcon(color),
+          zIndex: 999,
+        });
+      }
+
+      function showMapInfoBanner(text) {
+        const banner = document.getElementById("mapInfoBanner");
+        document.getElementById("mapInfoBannerText").textContent = text;
+        banner.style.display = text ? "flex" : "none";
+      }
+
+      async function refreshHotspotMapData() {
+        try {
+          const rows = await apiJson(
+            mapFilterMode === "hotspots" ? "/hotspots" : "/geo_records",
+          );
+          document.getElementById("hotspotCount").textContent =
+            `${rows.filter((r) => r.is_hotspot).length} hotspots`;
+          if (gmap) renderMapMarkers(rows);
+          renderHotspotList(rows);
+        } catch (e) {
+          document.getElementById("hotspotList").innerHTML =
+            `<div class="empty"><div>${e.message}</div></div>`;
+        }
+      }
+
+      function renderHotspotList(rows) {
+        const list = document.getElementById("hotspotList");
+        if (!rows.length) {
+          list.innerHTML =
+            '<div class="empty"><div>No geotagged records yet.</div></div>';
+          return;
+        }
+        list.innerHTML = rows
+          .map((r) => {
+            const m = AQI_META[r.aqi_category] || { color: "#94a3b8" };
+            return `<div class="hotspot-item" onclick="focusMapMarker(${r.latitude}, ${r.longitude})">
+              <div class="hotspot-item-head">
+                <span class="hotspot-item-title">AQI ${r.aqi_overall} · ${r.aqi_category}</span>
+                <span class="pill" style="background:${m.color}22;color:${m.color};border:1px solid ${m.color}44;">${r.is_hotspot ? "Hotspot" : "Tracked"}</span>
+              </div>
+              <div class="hotspot-item-meta">${new Date(r.timestamp + "Z").toLocaleString()}<br/>${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}</div>
+            </div>`;
+          })
+          .join("");
+      }
+
+      function focusMapMarker(lat, lng) {
+        if (!gmap) return;
+        gmap.panTo({ lat, lng });
+        gmap.setZoom(14);
+      }
+
+      function setMapFilter(mode) {
+        mapFilterMode = mode;
+        document
+          .getElementById("filterHotspots")
+          .classList.toggle("active", mode === "hotspots");
+        document
+          .getElementById("filterAllGeo")
+          .classList.toggle("active", mode === "all");
+        refreshHotspotMapData();
+      }
+
+      function centerMapOnContext(defaultCenter) {
+        // Priority: GPS from the most recently uploaded image, then the
+        // browser's live location, then the configured default.
+        if (lastPrediction && lastPrediction.geotagged) {
+          const pos = {
+            lat: lastPrediction.latitude,
+            lng: lastPrediction.longitude,
+          };
+          gmap.setCenter(pos);
+          gmap.setZoom(12);
+          setContextMarker(pos, "Image GPS location", "#38bdf8");
+          showMapInfoBanner("");
+          return;
+        }
+
+        showMapInfoBanner(
+          "Image does not contain GPS metadata. Showing your current location.",
+        );
+
+        if (!navigator.geolocation) {
+          gmap.setCenter(defaultCenter);
+          gmap.setZoom(10);
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const here = {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+            };
+            gmap.setCenter(here);
+            gmap.setZoom(12);
+            setContextMarker(here, "Your current location", "#22c55e");
+          },
+          () => {
+            // Permission denied or unavailable — fall back to default center
+            gmap.setCenter(defaultCenter);
+            gmap.setZoom(10);
+            showMapInfoBanner(
+              "Location access denied. Showing the default map area.",
+            );
+          },
+          { timeout: 8000 },
+        );
+      }
+
+      async function initHotspotMap(key, defaultCenter) {
+        try {
+          await loadGoogleMapsScript(key);
+        } catch (e) {
+          document.getElementById("mapSetup").style.display = "block";
+          document.getElementById("hotspotMap").style.display = "none";
+          toast(e.message, "error");
+          return;
+        }
+        document.getElementById("mapSetup").style.display = "none";
+        document.getElementById("hotspotMap").style.display = "block";
+        gmap = new google.maps.Map(document.getElementById("hotspotMap"), {
+          center: defaultCenter,
+          zoom: 10,
+          disableDefaultUI: false,
+          styles: document.body.classList.contains("light-theme")
+            ? []
+            : [
+                { elementType: "geometry", stylers: [{ color: "#0e1424" }] },
+                {
+                  elementType: "labels.text.stroke",
+                  stylers: [{ color: "#0e1424" }],
+                },
+                {
+                  elementType: "labels.text.fill",
+                  stylers: [{ color: "#94a3b8" }],
+                },
+                {
+                  featureType: "road",
+                  elementType: "geometry",
+                  stylers: [{ color: "#1c2844" }],
+                },
+                {
+                  featureType: "water",
+                  elementType: "geometry",
+                  stylers: [{ color: "#0a1020" }],
+                },
+                {
+                  featureType: "poi",
+                  elementType: "geometry",
+                  stylers: [{ color: "#161f38" }],
+                },
+              ],
+        });
+        centerMapOnContext(defaultCenter);
+        await refreshHotspotMapData();
+      }
+
+      async function loadHotspotMap() {
+        try {
+          if (!mapsConfig) mapsConfig = await apiJson("/config");
+          const defaultCenter = mapsConfig.default_map_center || {
+            lat: 20.5937,
+            lng: 78.9629,
+          };
+          if (!mapsConfig.google_maps_api_key) {
+            document.getElementById("mapSetup").style.display = "block";
+            document.getElementById("hotspotMap").style.display = "none";
+            await refreshHotspotMapData();
+            return;
+          }
+          await initHotspotMap(mapsConfig.google_maps_api_key, defaultCenter);
+        } catch (e) {
+          toast(e.message, "error");
+        }
+      }
+
+      function saveMapsKey() {
+        const key = document.getElementById("mapsKeyInput").value.trim();
+        if (!key) {
+          toast("Enter a Google Maps API key first.", "error");
+          return;
+        }
+        mapsConfig = mapsConfig || {};
+        mapsConfig.google_maps_api_key = key;
+        initHotspotMap(
+          key,
+          mapsConfig.default_map_center || { lat: 20.5937, lng: 78.9629 },
+        );
+      }
+
+      // ── History: search, sort, pagination, thumbnails ───────────
+      let allHistoryRows = [];
+      let historySearchTerm = "";
+      let historySortKey = "id";
+      let historySortDir = -1; // -1 = desc, 1 = asc
+      let historyPage = 1;
+      const HISTORY_PAGE_SIZE = 8;
+      const thumbCache = new Map();
+
+      const HISTORY_COLUMNS = [
+        { key: "id", label: "#" },
+        { key: "timestamp", label: "When" },
+        { key: "filename", label: "File" },
+        { key: "pm25", label: "PM2.5" },
+        { key: "pm10", label: "PM10" },
+        { key: "aqi_overall", label: "AQI" },
+        { key: "aqi_category", label: "Category" },
+      ];
+
+      function skeletonRows(n, cols) {
+        return Array.from({ length: n })
+          .map(
+            () =>
+              `<tr>${Array.from({ length: cols })
+                .map(
+                  () =>
+                    `<td><div class="skeleton" style="height:14px;width:${40 + Math.random() * 50}%;"></div></td>`,
+                )
+                .join("")}</tr>`,
+          )
+          .join("");
+      }
+
+      async function loadHistory() {
+        const wrap = document.getElementById("historyTable");
+        wrap.innerHTML = `<table><thead><tr>${HISTORY_COLUMNS.map((c) => `<th>${c.label}</th>`).join("")}<th></th></tr></thead><tbody>${skeletonRows(6, HISTORY_COLUMNS.length + 1)}</tbody></table>`;
+        try {
+          allHistoryRows = await apiJson("/records?limit=500");
+          historyPage = 1;
+          renderHistoryPage();
+        } catch {
+          wrap.innerHTML =
+            '<div class="empty"><div>Failed to load — is the backend running?</div></div>';
+          document.getElementById("paginationBar").style.display = "none";
+        }
+      }
+
+      function onHistorySearch() {
+        historySearchTerm = document
+          .getElementById("historySearch")
+          .value.trim()
+          .toLowerCase();
+        historyPage = 1;
+        renderHistoryPage();
+      }
+
+      function sortHistoryBy(key) {
+        if (historySortKey === key) {
+          historySortDir *= -1;
+        } else {
+          historySortKey = key;
+          historySortDir = -1;
+        }
+        historyPage = 1;
+        renderHistoryPage();
+      }
+
+      function changePage(delta) {
+        historyPage += delta;
+        renderHistoryPage();
+      }
+
+      function getFilteredSortedHistory() {
+        let rows = allHistoryRows;
+        if (historySearchTerm) {
+          rows = rows.filter(
+            (r) =>
+              (r.filename || "").toLowerCase().includes(historySearchTerm) ||
+              (r.aqi_category || "").toLowerCase().includes(historySearchTerm),
+          );
+        }
+        rows = [...rows].sort((a, b) => {
+          const av = a[historySortKey],
+            bv = b[historySortKey];
+          if (av == null) return 1;
+          if (bv == null) return -1;
+          if (typeof av === "string")
+            return av.localeCompare(bv) * historySortDir;
+          return (av - bv) * historySortDir;
+        });
+        return rows;
+      }
+
+      async function fetchThumb(id) {
+        if (thumbCache.has(id)) return thumbCache.get(id);
+        try {
+          const rec = await apiJson(`/records/${id}`);
+          thumbCache.set(id, rec.image_b64 || null);
+          return rec.image_b64 || null;
+        } catch {
+          thumbCache.set(id, null);
+          return null;
+        }
+      }
+
+      function renderHistoryPage() {
+        const wrap = document.getElementById("historyTable");
+        const rows = getFilteredSortedHistory();
+
+        if (!allHistoryRows.length) {
+          wrap.innerHTML =
+            '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg><div>No records yet. Run a prediction first.</div></div>';
+          document.getElementById("paginationBar").style.display = "none";
+          return;
+        }
+        if (!rows.length) {
+          wrap.innerHTML =
+            '<div class="empty"><div>No records match your search.</div></div>';
+          document.getElementById("paginationBar").style.display = "none";
+          return;
+        }
+
+        const totalPages = Math.max(
+          1,
+          Math.ceil(rows.length / HISTORY_PAGE_SIZE),
+        );
+        historyPage = Math.min(Math.max(1, historyPage), totalPages);
+        const start = (historyPage - 1) * HISTORY_PAGE_SIZE;
+        const pageRows = rows.slice(start, start + HISTORY_PAGE_SIZE);
+
+        wrap.innerHTML = `<table>
+      <thead><tr>
+        ${HISTORY_COLUMNS.map(
+          (c) =>
+            `<th class="sortable${historySortKey === c.key ? " active" : ""}" onclick="sortHistoryBy('${c.key}')">${c.label}<span class="sort-arrow">${historySortKey === c.key ? (historySortDir === 1 ? "↑" : "↓") : "↕"}</span></th>`,
+        ).join("")}<th></th>
+      </tr></thead>
+      <tbody>${pageRows
+        .map((r) => {
+          const m = AQI_META[r.aqi_category] || { color: "#94a3b8" };
+          const ts = new Date(r.timestamp + "Z").toLocaleString();
+          return `<tr>
+        <td style="color:var(--text3);font-family:var(--mono);font-size:11px;">${r.id}</td>
+        <td style="font-size:12px;color:var(--text2);white-space:nowrap;">${ts}</td>
+          <td style="font-size:12px;max-width:200px;" title="${r.filename}">
+            <div class="file-cell">
+              <img class="row-thumb" id="thumb-${r.id}" src="" alt="" style="display:none;" />
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.filename}</span>
+            </div>
+          </td>
+          <td><strong>${r.pm25 != null ? r.pm25.toFixed(1) : "—"}</strong></td>
+          <td><strong>${r.pm10 != null ? r.pm10.toFixed(1) : "—"}</strong></td>
+          <td style="font-family:var(--mono);font-weight:600;color:${m.color}">${r.aqi_overall}</td>
+          <td><span class="pill" style="background:${m.color}22;color:${m.color};border:1px solid ${m.color}44;">${r.aqi_category}</span></td>
+          <td><button class="btn btn-danger btn-sm" onclick="confirmDeleteRecord(${r.id})">Delete</button></td>
+        </tr>`;
+        })
+        .join("")}</tbody>
+    </table>`;
+
+        document.getElementById("paginationBar").style.display = "flex";
+        document.getElementById("paginationInfo").textContent =
+          `${start + 1}–${Math.min(start + HISTORY_PAGE_SIZE, rows.length)} of ${rows.length}`;
+        document.getElementById("prevPageBtn").disabled = historyPage <= 1;
+        document.getElementById("nextPageBtn").disabled =
+          historyPage >= totalPages;
+
+        // Lazy-load thumbnails for the visible page only
+        pageRows.forEach(async (r) => {
+          const b64 = await fetchThumb(r.id);
+          const img = document.getElementById(`thumb-${r.id}`);
+          if (img && b64) {
+            img.src = `data:image/jpeg;base64,${b64}`;
+            img.style.display = "block";
+          }
+        });
+      }
+
+      function closeModal() {
+        document.getElementById("modalRoot").innerHTML = "";
+      }
+
+      async function confirmDeleteRecord(id) {
+        const row = allHistoryRows.find((r) => r.id === id);
+        const thumb = await fetchThumb(id);
+        const root = document.getElementById("modalRoot");
+        root.innerHTML = `
+          <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+            <div class="modal-box">
+              <div class="modal-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+              </div>
+              ${thumb ? `<img class="modal-thumb" src="data:image/jpeg;base64,${thumb}" alt="" />` : ""}
+              <div class="modal-title">Delete this record?</div>
+              <div class="modal-body">Record #${id}${row ? ` (${row.aqi_category}, AQI ${row.aqi_overall})` : ""} will be permanently removed. This can't be undone.</div>
+              <div class="modal-actions">
+                <button class="btn btn-sm" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteRecord(${id})">Delete</button>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      async function deleteRecord(id) {
+        closeModal();
+        try {
+          await apiJson(`/records/${id}`, { method: "DELETE" });
+          toast(`Record #${id} deleted`, "success");
+          loadHistory();
+        } catch (e) {
+          toast(e.message, "error");
+        }
+      }
+
+      function exportCSV() {
+        apiJson("/records?limit=500")
+          .then((rows) => {
+            if (!rows.length) {
+              toast("No records to export", "error");
+              return;
+            }
+            const headers = Object.keys(rows[0]);
+            const csv = [
+              headers.join(","),
+              ...rows.map((r) => headers.map((h) => r[h]).join(",")),
+            ].join("\n");
+            const blob = new Blob([csv], { type: "text/csv" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `airvisionnet_${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            toast("CSV exported", "success");
+          })
+          .catch((err) => toast(err.message, "error"));
+      }
+
+      let pm25C, pm10C, catC;
+
+      async function loadAnalytics() {
+        const boxesInit = document.querySelectorAll("#statsGrid .stat-box");
+        boxesInit.forEach((b) => {
+          b.querySelector(".stat-num").innerHTML =
+            '<div class="skeleton" style="height:28px;width:60%;"></div>';
+        });
+        try {
+          const [stats, rows] = await Promise.all([
+            apiJson("/stats"),
+            apiJson("/records"),
+          ]);
+
+          const boxes = document.querySelectorAll("#statsGrid .stat-box");
+          boxes[0].querySelector(".stat-num").textContent = stats.total ?? "—";
+          boxes[1].querySelector(".stat-num").textContent = stats.pm25
+            ? stats.pm25.avg.toFixed(1)
+            : "—";
+          boxes[2].querySelector(".stat-num").textContent = stats.pm10
+            ? stats.pm10.avg.toFixed(1)
+            : "—";
+          boxes[3].querySelector(".stat-num").textContent = stats.aqi
+            ? stats.aqi.avg.toFixed(0)
+            : "—";
+
+          if (!stats.total) return;
+
+          const sortedRows = [...rows].reverse();
+          const labels = sortedRows.map((r) =>
+            new Date(r.timestamp + "Z").toLocaleString(undefined, {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          );
+          const pm25vals = sortedRows.map((r) =>
+            r.pm25 ? +r.pm25.toFixed(1) : 0,
+          );
+          const pm10vals = sortedRows.map((r) =>
+            r.pm10 ? +r.pm10.toFixed(1) : 0,
+          );
+
+          const chartOpts = (label, data, color) => ({
+            type: "line",
+            data: {
+              labels,
+              datasets: [
+                {
+                  label,
+                  data,
+                  borderColor: color,
+                  backgroundColor: color + "20",
+                  fill: true,
+                  tension: 0.4,
+                  pointRadius: 4,
+                  pointHoverRadius: 6,
+                  borderWidth: 2,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: {
+                  ticks: {
+                    color: "#64748b",
+                    font: { family: "JetBrains Mono", size: 10 },
+                    maxTicksLimit: 10,
+                  },
+                  grid: { color: "rgba(148,163,184,0.06)" },
+                },
+                y: {
+                  ticks: {
+                    color: "#64748b",
+                    font: { family: "JetBrains Mono", size: 10 },
+                  },
+                  grid: { color: "rgba(148,163,184,0.06)" },
+                },
+              },
+            },
+          });
+
+          if (pm25C) pm25C.destroy();
+          if (pm10C) pm10C.destroy();
+          pm25C = new Chart(
+            document.getElementById("pm25Chart"),
+            chartOpts("PM2.5", pm25vals, "#5eead4"),
+          );
+          pm10C = new Chart(
+            document.getElementById("pm10Chart"),
+            chartOpts("PM10", pm10vals, "#38bdf8"),
+          );
+
+          const cats = stats.category_distribution || {};
+          const catColors = {
+            Good: "#22c55e",
+            Satisfactory: "#84cc16",
+            Moderate: "#eab308",
+            Poor: "#f97316",
+            "Very Poor": "#a855f7",
+            Severe: "#dc2626",
+          };
+          const catLabels = Object.keys(cats);
+          const catVals = Object.values(cats);
+          const catCols = catLabels.map((l) => catColors[l] || "#64748b");
+
+          if (catC) catC.destroy();
+          catC = new Chart(document.getElementById("catChart"), {
+            type: "doughnut",
+            data: {
+              labels: catLabels,
+              datasets: [
+                {
+                  data: catVals,
+                  backgroundColor: catCols,
+                  borderWidth: 0,
+                  hoverOffset: 6,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              cutout: "72%",
+            },
+          });
+
+          const total = catVals.reduce((a, b) => a + b, 0);
+          document.getElementById("catLegend").innerHTML = catLabels
+            .map(
+              (l, i) =>
+                `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:13px;">
+        <span style="width:12px;height:12px;border-radius:4px;background:${catCols[i]};flex-shrink:0;"></span>
+        <span style="color:var(--text2);">${l}</span>
+        <span style="margin-left:auto;font-family:var(--mono);font-weight:500;">${((catVals[i] / total) * 100).toFixed(0)}%</span>
+      </div>`,
+            )
+            .join("");
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      async function loadStandards() {
+        try {
+          const d = await apiJson("/aqi_standards");
+          const catColors = {
+            Good: "#22c55e",
+            Satisfactory: "#84cc16",
+            Moderate: "#eab308",
+            Poor: "#f97316",
+            "Very Poor": "#a855f7",
+            Severe: "#dc2626",
+          };
+
+          document.getElementById("pm25StdTable").innerHTML = d.pm25_breakpoints
+            .map(
+              (b) =>
+                `<tr>
+        <td>${b.range}</td>
+        <td style="font-family:var(--mono);">${b.aqi}</td>
+        <td><span class="pill" style="background:${catColors[b.category]}22;color:${catColors[b.category]};border:1px solid ${catColors[b.category]}44;">${b.category}</span></td>
+        <td style="font-size:12px;color:var(--text2);">${b.health || ""}</td>
+      </tr>`,
+            )
+            .join("");
+
+          document.getElementById("pm10StdTable").innerHTML = d.pm10_breakpoints
+            .map(
+              (b) =>
+                `<tr>
+        <td>${b.range}</td>
+        <td style="font-family:var(--mono);">${b.aqi}</td>
+        <td><span class="pill" style="background:${catColors[b.category]}22;color:${catColors[b.category]};border:1px solid ${catColors[b.category]}44;">${b.category}</span></td>
+      </tr>`,
+            )
+            .join("");
+
+          document.getElementById("colorRef").innerHTML = Object.entries(
+            catColors,
+          )
+            .map(
+              ([cat, col]) =>
+                `<div style="background:${col}18;border:1px solid ${col}40;border-radius:12px;padding:16px 12px;text-align:center;">
+        <div style="width:20px;height:20px;border-radius:50%;background:${col};margin:0 auto 10px;box-shadow:0 0 16px ${col}66;"></div>
+        <div style="font-size:12px;font-weight:600;color:${col};">${cat}</div>
+      </div>`,
+            )
+            .join("");
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    </script>
+  </body>
+</html>
